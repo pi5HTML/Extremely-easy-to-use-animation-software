@@ -13,11 +13,11 @@ scale
 It is very basic right now, might get volumetric fog, smoke, and explosions in future updates
 
 Minumun specs: 
-ANY modern CPU
-4GB RAM
-RTX 2060 (for hardware acceleration and modern RTX series software intergration)
+- ANY modern CPU
+- 4GB RAM
+- RTX 2060 (for hardware acceleration and modern RTX series software intergration)
 
 Recommended:
-Still any CPU
-8-16GB RAM
-RTX 4050
+- Still any CPU
+- 8-16GB RAM
+- RTX 4050
