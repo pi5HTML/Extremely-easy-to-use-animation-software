@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Procedural Animation Studio</title>
+<style>
+:root{--bg:#eceff3;--panel:#fff;--line:#cfd5dd;--fg:#1a1d22;--mut:#667080;--acc:#1673d6;--btn:#e4e8ee;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121418;--panel:#1c1f26;--line:#2e333c;--fg:#e6e8ec;--mut:#8a93a3;--acc:#4da3ff;--btn:#2a2f39}}
+:root[data-theme="dark"]{--bg:#121418;--panel:#1c1f26;--line:#2e333c;--fg:#e6e8ec;--mut:#8a93a3;--acc:#4da3ff;--btn:#2a2f39}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:13px system-ui,-apple-system,Segoe UI,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+#bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 8px;background:var(--panel);border-bottom:1px solid var(--line)}
+button,select,input,textarea{font:inherit;color:var(--fg)}
+button{background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--acc)}button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+select,input[type=number]{background:var(--btn);border:1px solid var(--line);border-radius:6px;padding:4px}
+.sep{width:1px;height:20px;background:var(--line)}.mut{color:var(--mut)}
+#vp{flex:1;min-height:0;position:relative;overflow:hidden}
+#vp canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#side{position:absolute;left:8px;top:8px;width:240px;max-height:calc(100% - 16px);overflow:auto;display:flex;flex-direction:column;gap:6px}
+details{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;opacity:.96}
+summary{cursor:pointer;font-weight:600}
+.row{display:grid;grid-template-columns:92px 1fr;gap:6px;align-items:center;margin-top:6px}
+.row input[type=range]{width:100%}
+.act{display:flex;gap:4px;margin-top:4px}.act button:first-child{flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pip{position:absolute;border:2px solid var(--acc);border-radius:4px;pointer-events:none}
+#pip span{position:absolute;left:4px;top:2px;font-size:10px;color:#fff;text-shadow:0 0 3px #000}
+#hint{position:absolute;right:10px;top:8px;color:#fff;text-shadow:0 0 4px #000;font-size:12px;pointer-events:none;text-align:right}
+#tl{background:var(--panel);border-top:1px solid var(--line);padding:6px 8px}
+#frames{display:flex;align-items:center;gap:6px;overflow-x:auto;padding:4px 0;min-height:64px}
+.fb{flex:none;width:118px;height:54px;border:1px solid var(--line);border-radius:6px;background:var(--btn);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:3px}
+.fb.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}.fb b{font-size:15px}
+.fb div{display:flex;gap:2px}.fb button{padding:0 5px;font-size:11px}
+.gap{flex:none;display:flex;flex-direction:column;align-items:center;font-size:10px;color:var(--mut)}.gap input{width:58px}
+#scrub{width:100%}
+dialog{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:10px;width:min(560px,92vw)}
+dialog textarea{width:100%;height:220px;background:var(--btn);border:1px solid var(--line);border-radius:6px;font:11px monospace}
+</style></head>
+<body>
+<div id="bar">
+ <button id="bUndo" title="Undo (Ctrl+Z)">↶ Undo</button><button id="bRedo" title="Redo (Ctrl+Y)">↷ Redo</button><span class="sep"></span><button id="bMode" title="Toggle whole-object vs single-bone editing">Mode: Object</button>
+ <button id="bW" class="on">Move (W)</button><button id="bE">Rotate (E)</button>
+ <select id="boneSel" title="Select bone" style="max-width:130px;display:none"></select>
+ <span class="sep"></span>
+ <button id="bCam">Edit Camera</button><button id="bSnap" title="Copy editor view to the movie camera">Snap Cam to View</button>
+ <label><input type="checkbox" id="look"> Look Through Movie Camera</label>
+ <span class="sep"></span>
+ <button id="bPlay">▶ Play</button>
+ <select id="fps"><option>24</option><option selected>30</option><option>60</option></select><span class="mut">FPS</span>
+ <select id="ease"><option value="s">Smooth</option><option value="l">Linear</option></select>
+ <span class="sep"></span>
+ <span class="sep"></span><span class="mut">Scale</span><input type="number" id="sU" step="0.1" min="0.001" value="1" title="Uniform scale" style="width:62px"><input type="number" id="sX" step="0.1" min="0.001" value="1" title="X" style="width:54px"><input type="number" id="sY" step="0.1" min="0.001" value="1" title="Y" style="width:54px"><input type="number" id="sZ" step="0.1" min="0.001" value="1" title="Z" style="width:54px"><button id="bDel" title="Delete selected object (Del)" style="background:#d63030;border-color:#d63030;color:#fff">Delete</button><span class="sep"></span><button id="bCube">Add Cube</button><button id="bLight">Add Light</button><button id="bFog">Add Fog</button><button id="bSmoke">Add Smoke</button><button id="bBoom">Add Explosion</button><button id="bHeat">Add Heat Bar</button><button id="bSave">Save Project</button><button id="bLoad">Load Project</button><button id="bExp">Export Movie</button>
+</div>
+<div id="vp">
+ <div id="side">
+  <details open><summary>Scene Objects</summary><div id="actors" class="mut">Drop .fbx .glb .gltf .obj .stl anywhere</div></details>
+  <details open id="lightInsp" style="display:none"><summary>Selected Light</summary>
+   <div class="row"><span>Color</span><input type="color" id="lC" value="#ffd36b"></div>
+   <div class="row"><span>Brightness</span><div style="display:flex;gap:4px"><input type="range" id="lB" min="0" max="100" step="0.1" value="1" style="flex:1;min-width:0"><input type="number" id="lBn" min="0" step="0.5" value="1" style="width:56px"></div></div>
+   <div class="row"><span>Range <small class="mut" id="lDv"></small></span><input type="range" id="lD" min="0" max="100" step="1" value="25"></div>
+   <div class="mut" style="font-size:11px;margin-top:6px">Range 0 = unlimited. Casts soft shadows.</div></details>
+  <details open id="fxInsp" style="display:none"><summary id="fxTitle">Effect</summary><div id="fxRows"></div>
+   <div id="fxBtns" style="display:none;margin-top:8px;flex-direction:column;gap:4px"><button id="fxTrig">💥 Trigger Explosion</button><button id="fxKey">Fire at selected frame</button></div></details>
+  <details open><summary>Lighting &amp; Atmosphere</summary><div id="lights"></div></details>
+ </div>
+ <div id="hint">LMB orbit · click objects to select · W/E gizmo · Space play · Arrow keys fly, PgUp/PgDn or R/F up/down (Shift = 4×)</div>
+ <div id="pip"><span>MovieCamera</span></div>
+</div>
+<div id="tl">
+ <div style="display:flex;gap:8px;align-items:center"><button id="bCap">+ Capture Frame</button><span id="tinfo" class="mut"></span></div>
+ <div id="frames"></div>
+ <input type="range" id="scrub" min="0" max="0" value="0" step="1">
+</div>
+<dialog id="io"><b>Project JSON</b>
+ <p class="mut">Models are not embedded. Re-drop the same files, then load; frames re-attach by object name.</p>
+ <textarea id="ta" spellcheck="false"></textarea>
+ <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button id="ioDl">Download .json</button><button id="ioCp">Copy</button>
+ <input type="file" id="ioFile" accept=".json"><button id="ioApply">Load from text</button><button id="ioClose" style="margin-left:auto">Close</button></div>
+</dialog>
+
+<dialog id="ex"><b>Export Movie</b>
+ <div class="row"><span>Resolution</span><select id="exRes"><option value="1280x720">1280x720 (720p)</option><option value="1920x1080" selected>1920x1080 (1080p)</option><option value="3840x2160">3840x2160 (4K)</option></select></div>
+ <div class="row"><span>Frame rate</span><select id="exFps"><option value="24">24 FPS (Cinematic)</option><option value="30" selected>30 FPS</option><option value="60">60 FPS</option></select></div>
+ <div class="row"><span>Format</span><div><label><input type="radio" name="exFmt" value="video" checked> Video (.mp4 / .webm, real-time)</label><br><label><input type="radio" name="exFmt" value="png"> PNG sequence (.zip, frame-exact)</label></div></div>
+ <progress id="exP" value="0" max="1" style="width:100%;margin-top:10px"></progress>
+ <div id="exMsg" class="mut" style="min-height:1.5em"></div>
+ <div style="display:flex;gap:6px;margin-top:6px"><button id="exGo" class="on">Start Export</button><button id="exClose" style="margin-left:auto">Cancel / Close</button></div>
+ <p class="mut" style="font-size:11px;margin-bottom:0">Needs 2+ captured frames. Video plays in real time (heavy 4K/60 may drop frames). PNG sequences are frame-exact but 4K needs lots of memory.</p>
+</dialog>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {TransformControls} from 'three/addons/controls/TransformControls.js';
+import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {OBJLoader} from 'three/addons/loaders/OBJLoader.js';
+import {STLLoader} from 'three/addons/loaders/STLLoader.js';
+
+const $=id=>document.getElementById(id), vp=$('vp');
+
+/* ================= CORE / EXTENSION API (physics, VFX plug in here) ================= */
+const studio={THREE,hooks:{pre:[],post:[],play:[]},modules:[],
+  use(m){this.modules.push(m);m.init&&m.init(this);return this;}};
+window.studio=studio;
+
+/* ================= RENDERER ================= */
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+vp.prepend(renderer.domElement);
+const scene=new THREE.Scene();scene.fog=new THREE.FogExp2(0xbcc9d8,.008);
+const editorOnly=[];
+
+/* ================= CAMERAS ================= */
+const edCam=new THREE.PerspectiveCamera(50,1,.1,10000);edCam.position.set(5,3.5,7);
+const orbit=new OrbitControls(edCam,renderer.domElement);orbit.target.set(0,1,0);orbit.enableDamping=true;orbit.minDistance=0.01;orbit.maxDistance=Infinity;if('maxTargetRadius' in orbit)orbit.maxTargetRadius=Infinity;
+const movieCam=new THREE.PerspectiveCamera(40,16/9,.1,40);movieCam.position.set(0,1.6,6);movieCam.lookAt(0,1,0);scene.add(movieCam);
+const camBody=new THREE.Group(),mat=new THREE.MeshBasicMaterial({color:0xff9a1f});
+camBody.add(new THREE.Mesh(new THREE.BoxGeometry(.35,.22,.3),mat));
+const lens=new THREE.Mesh(new THREE.CylinderGeometry(.07,.11,.14,16).rotateX(Math.PI/2),mat);lens.position.z=-.2;camBody.add(lens);
+movieCam.add(camBody);
+const camHelper=new THREE.CameraHelper(movieCam);scene.add(camHelper);
+const tc=new TransformControls(edCam,renderer.domElement);
+const tcObj=tc.getHelper?tc.getHelper():tc;scene.add(tcObj);
+tc.addEventListener('dragging-changed',e=>{orbit.enabled=!e.value&&!S.look;if(!e.value)pushH()});
+editorOnly.push(camBody,camHelper,tcObj);
+
+/* ================= LIGHTING / ENVIRONMENT ================= */
+const L={az:35,el:45,int:3,color:'#fff1dc',fog:.008,exp:1,env:1};
+const sun=new THREE.DirectionalLight(0xffffff,3);sun.castShadow=true;
+sun.shadow.mapSize.set(4096,4096);Object.assign(sun.shadow.camera,{left:-15,right:15,top:15,bottom:-15,near:1,far:80});
+sun.shadow.bias=-.0004;sun.shadow.normalBias=.03;sun.shadow.radius=4;scene.add(sun,sun.target);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:0x8a8f96,roughness:.85}));
+ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+const grid=new THREE.GridHelper(40,40,0x000000,0x000000);grid.material.transparent=true;grid.material.opacity=.15;grid.position.y=.002;scene.add(grid);editorOnly.push(grid);
+const skyMat=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,
+ uniforms:{sd:{value:new THREE.Vector3()},sc:{value:new THREE.Color()},gain:{value:1}},
+ vertexShader:'varying vec3 vD;void main(){vD=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+ fragmentShader:`uniform vec3 sd,sc;uniform float gain;varying vec3 vD;
+ void main(){vec3 d=normalize(vD);float h=d.y;vec3 top=vec3(.10,.32,.78),hor=vec3(.78,.86,.95),gnd=vec3(.16,.15,.14);
+ vec3 c=h>0.?mix(hor,top,pow(h,.45)):mix(hor,gnd,pow(-h,.35));float s=max(dot(d,sd),0.);
+ c+=sc*(pow(s,700.)*40.+pow(s,10.)*.4);gl_FragColor=vec4(c*gain,1.);}`});
+const skyScene=new THREE.Scene();skyScene.add(new THREE.Mesh(new THREE.SphereGeometry(10,32,16),skyMat));
+const pmrem=new THREE.PMREMGenerator(renderer);let envRT=null,envDirty=true;
+function updateLights(){
+ const a=THREE.MathUtils.degToRad(L.az),e=THREE.MathUtils.degToRad(L.el);
+ const d=new THREE.Vector3(Math.cos(e)*Math.sin(a),Math.sin(e),Math.cos(e)*Math.cos(a));
+ sun.position.copy(d).multiplyScalar(40);sun.intensity=L.int;sun.color.set(L.color);
+ scene.fog.density=L.fog;renderer.toneMappingExposure=L.exp;
+ skyMat.uniforms.sd.value.copy(d);skyMat.uniforms.sc.value.set(L.color);skyMat.uniforms.gain.value=L.env;envDirty=true;
+}
+function rebuildEnv(){ // procedural HDRI -> PMREM reflections + background
+ const old=envRT;envRT=pmrem.fromScene(skyScene,.02,.1,100);
+ scene.environment=envRT.texture;scene.background=envRT.texture;old&&old.dispose();envDirty=false;
+}
+const SL=[['az','Sun angle (azimuth)',0,360,1],['el','Sun elevation',2,90,1],['int','Sun intensity',0,10,.05],['fog','Fog density',0,.05,.0005],['exp','Exposure',.1,3,.01],['env','Sky / reflection',0,3,.05]];
+const ui={};
+SL.forEach(([k,n,mn,mx,st])=>{const r=document.createElement('div');r.className='row';r.innerHTML=`<span>${n}</span><input type="range" min="${mn}" max="${mx}" step="${st}">`;
+ const i=r.querySelector('input');i.value=L[k];i.oninput=()=>{L[k]=+i.value;updateLights()};i.onchange=()=>pushH();ui[k]=i;$('lights').append(r)});
+{const r=document.createElement('div');r.className='row';r.innerHTML='<span>Sun color</span><input type="color">';const i=r.querySelector('input');i.value=L.color;i.oninput=()=>{L.color=i.value;updateLights()};i.onchange=()=>pushH();ui.color=i;$('lights').append(r)}
+updateLights();
+
+/* ================= ACTORS (imported static meshes, animations stripped) ================= */
+const actors=[];studio.actors=actors;let uid=0;
+const isDesc=(o,p)=>{for(;o;o=o.parent)if(o===p)return true;return false};
+function makeActor(obj,name){
+ obj.animations=[]; // procedural only: embedded clips are ignored
+ obj.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;o.frustumCulled=false}});
+ const root=new THREE.Group();root.add(obj);root.updateMatrixWorld(true);
+ const box=new THREE.Box3().setFromObject(obj),sz=box.getSize(new THREE.Vector3());
+ obj.scale.multiplyScalar(1.8/Math.max(sz.x,sz.y,sz.z,1e-6));root.updateMatrixWorld(true);
+ box.setFromObject(obj);const c=box.getCenter(new THREE.Vector3());obj.position.x-=c.x;obj.position.z-=c.z;obj.position.y-=box.min.y;
+ const bones=[];obj.traverse(o=>o.isBone&&bones.push(o));
+ let helper=null;if(bones.length){helper=new THREE.SkeletonHelper(obj);helper.visible=S.bone;scene.add(helper);editorOnly.push(helper)}
+ root.position.x=actors.length*1.6;scene.add(root);
+ const a={id:`${name}#${++uid}`,name,root,bones,helper};actors.push(a);drawActors();selectActor(a);pushH();return a;
+}
+async function addFile(f){
+ const ext=f.name.split('.').pop().toLowerCase(),name=f.name.replace(/\.[^.]+$/,'');let obj;
+ try{
+  if(ext==='fbx')obj=new FBXLoader().parse(await f.arrayBuffer(),'');
+  else if(ext==='glb'||ext==='gltf'){const d=ext==='gltf'?await f.text():await f.arrayBuffer();obj=await new Promise((ok,no)=>new GLTFLoader().parse(d,'',g=>ok(g.scene),no))}
+  else if(ext==='obj')obj=new OBJLoader().parse(await f.text());
+  else if(ext==='stl')obj=new THREE.Mesh(new STLLoader().parse(await f.arrayBuffer()),new THREE.MeshStandardMaterial({color:0xb8bec8,roughness:.5,metalness:.2}));
+  else return;
+  makeActor(obj,name);
+ }catch(e){alert('Could not load '+f.name+': '+e.message)}
+}
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();[...e.dataTransfer.files].forEach(addFile)});
+$('bCube').onclick=()=>makeActor(new THREE.Mesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color:0xd04a3a,roughness:.4})),'Cube');
+function drawActors(){colDirty=true;
+ const el=$('actors');el.textContent='';if(!actors.length){el.textContent='Drop .fbx .glb .gltf .obj .stl anywhere';return}
+ actors.forEach(a=>{const d=document.createElement('div');d.className='act';const b=document.createElement('button'),x=document.createElement('button');
+  b.textContent=a.id+(a.bones.length?` (${a.bones.length} bones)`:'');b.onclick=()=>selectActor(a);x.textContent='✕';x.title='Remove';
+  x.onclick=()=>{removeActor(a);pushH()};
+  d.append(b,x);el.append(d)});
+}
+
+/* ================= SCALE + DELETE ================= */
+function removeActor(a){
+ if(actors.indexOf(a)<0)return;
+ if(S.a===a){tc.detach();S.a=S.b=null;S.t=null}
+ scene.remove(a.root);
+ if(a.helper){scene.remove(a.helper);const i=editorOnly.indexOf(a.helper);if(i>=0)editorOnly.splice(i,1)}
+ /* geometry kept alive so Undo can restore it */
+ actors.splice(actors.indexOf(a),1);
+ frames.forEach(f=>delete f.actors[a.id]); // purge from keyframe data
+ drawActors();fillBones();
+}
+function deleteSelected(){if(S.a){removeActor(S.a);pushH()}}
+$('bDel').onclick=deleteSelected;
+const sI={U:$('sU'),X:$('sX'),Y:$('sY'),Z:$('sZ')};
+function applyScale(src){const a=S.a;if(!a)return;const g=k=>Math.max(.001,+sI[k].value||1);
+ if(src==='U')a.root.scale.setScalar(g('U'));else a.root.scale.set(g('X'),g('Y'),g('Z'))}
+Object.entries(sI).forEach(([k,el])=>{el.oninput=()=>applyScale(k);el.onchange=()=>pushH()});
+function syncScale(){const a=S.a;Object.values(sI).forEach(e=>e.disabled=!a);if(!a)return;
+ const s=a.root.scale,f=document.activeElement,set=(el,v)=>{if(el!==f)el.value=+v.toFixed(3)};
+ set(sI.X,s.x);set(sI.Y,s.y);set(sI.Z,s.z);set(sI.U,(s.x+s.y+s.z)/3)}
+
+/* ================= SELECTION + TRANSFORM MODES ================= */
+const S={look:false,bone:false,t:null,a:null,b:null,tcMode:'translate',playing:false};
+function setTc(m){S.tcMode=m;tc.setMode(S.t==='bone'?'rotate':m);$('bW').classList.toggle('on',tc.mode==='translate');$('bE').classList.toggle('on',tc.mode==='rotate')}
+function selectCam(){S.t='cam';S.a=S.b=null;tc.attach(movieCam);tc.setSpace('world');setTc(S.tcMode);fillBones()}
+function selectActor(a){S.a=a;S.b=null;
+ if(S.bone&&a.bones.length)return selectBone(a.bones[0]);
+ S.t='actor';tc.attach(a.root);tc.setSpace('world');setTc(S.tcMode);fillBones()}
+function selectBone(b){S.t='bone';S.b=b;tc.attach(b);tc.setSpace('local');setTc(S.tcMode);fillBones()}
+function fillBones(){showInsp();showFx();const s=$('boneSel');s.textContent='';const ok=S.bone&&S.a&&S.a.bones.length;s.style.display=ok?'':'none';if(!ok)return;
+ S.a.bones.forEach((b,i)=>{const o=new Option(b.name||('bone '+i),i);s.add(o)});s.value=Math.max(0,S.a.bones.indexOf(S.b))}
+$('boneSel').onchange=e=>selectBone(S.a.bones[+e.target.value]);
+function setBoneMode(v){S.bone=v;$('bMode').textContent='Mode: '+(v?'Individual Bone':'Whole Object');$('bMode').classList.toggle('on',v);
+ actors.forEach(a=>a.helper&&(a.helper.visible=v));if(S.a)selectActor(S.a);else fillBones()}
+$('bMode').onclick=()=>setBoneMode(!S.bone);
+$('bW').onclick=()=>setTc('translate');$('bE').onclick=()=>setTc('rotate');
+$('bCam').onclick=selectCam;
+$('bSnap').onclick=()=>{movieCam.position.copy(edCam.position);movieCam.quaternion.copy(edCam.quaternion);movieCam.updateMatrixWorld(true)};
+function setLook(v){S.look=v;$('look').checked=v;orbit.enabled=!v}
+$('look').onchange=e=>setLook(e.target.checked);
+
+// click-picking (ignores orbit drags)
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();ray.layers.enable(1);let down=null;
+renderer.domElement.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
+renderer.domElement.addEventListener('pointerup',e=>{
+ if(!down||tc.dragging||S.look||S.playing)return;if(Math.hypot(e.clientX-down[0],e.clientY-down[1])>4)return;
+ const r=renderer.domElement.getBoundingClientRect();ndc.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1);ray.setFromCamera(ndc,edCam);
+ const hit=ray.intersectObjects([camBody,...actors.map(a=>a.root)],true)[0];if(!hit)return;
+ if(isDesc(hit.object,camBody))return selectCam();
+ const a=actors.find(a=>isDesc(hit.object,a.root));if(!a)return;
+ if(S.bone&&a.bones.length){S.a=a;let best=null,bd=1e9;const p=new THREE.Vector3();
+  a.bones.forEach(b=>{b.getWorldPosition(p);const d=p.distanceTo(hit.point);if(d<bd){bd=d;best=b}});selectBone(best)}
+ else selectActor(a);
+});
+addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;
+ if(flyOn()&&FLY.has(e.code)&&!e.ctrlKey&&!e.metaKey){e.preventDefault();return}
+ 
+ if((e.ctrlKey||e.metaKey)&&/^[zy]$/i.test(e.key)){e.preventDefault();(e.key.toLowerCase()==='y'||e.shiftKey)?redo():undo()}else if(e.key==='w'||e.key==='W')setTc('translate');else if(e.key==='e'||e.key==='E')setTc('rotate');
+ else if(e.key===' '){e.preventDefault();togglePlay()}else if(e.key==='Delete')deleteSelected()});
+
+/* ================= KEYFRAME ENGINE (position + every bone quaternion) ================= */
+let frames=[],cur=-1;
+const _q=new THREE.Quaternion(),_v=new THREE.Vector3();
+const snap=()=>({gap:frames.length?1:0,
+ cam:{p:movieCam.position.toArray(),q:movieCam.quaternion.toArray(),fov:movieCam.fov},
+ actors:Object.fromEntries(actors.map(a=>[a.id,{p:a.root.position.toArray(),q:a.root.quaternion.toArray(),s:a.root.scale.toArray(),b:a.bones.map(b=>b.quaternion.toArray()),x:a.fp&&a.fp.type==='boom'?{...a.fp}:null}]))});
+function pose(A,B,k){
+ movieCam.position.fromArray(A.cam.p).lerp(_v.fromArray(B.cam.p),k);
+ movieCam.quaternion.fromArray(A.cam.q).slerp(_q.fromArray(B.cam.q),k);
+ movieCam.fov=A.cam.fov+(B.cam.fov-A.cam.fov)*k;movieCam.updateProjectionMatrix();
+ for(const a of actors){const pa=A.actors[a.id],pb=B.actors[a.id]||pa;if(!pa)continue;
+  a.root.position.fromArray(pa.p).lerp(_v.fromArray(pb.p),k);          // root travel: no moonwalking
+  a.root.quaternion.fromArray(pa.q).slerp(_q.fromArray(pb.q),k);
+  if(pa.s)a.root.scale.fromArray(pa.s).lerp(_v.fromArray(pb.s||pa.s),k);
+  if(pa.x&&a.fp&&a.fp.type==='boom'){Object.assign(a.fp,pa.x);fxApply(a)}
+  a.bones.forEach((b,i)=>{if(pa.b[i])b.quaternion.fromArray(pa.b[i]).slerp(_q.fromArray(pb.b[i]||pa.b[i]),k)})}
+ camHelper.update();
+}
+const starts=()=>{let t=0;return frames.map((f,i)=>i?(t+=f.gap):0)};
+const total=()=>frames.length?starts().pop():0;
+function sample(t){if(!frames.length)return;const T=starts(),n=frames.length-1;
+ if(t>=T[n]||n===0)return pose(frames[n],frames[n],0);
+ let i=0;while(i<n-1&&t>=T[i+1])i++;let k=(t-T[i])/frames[i+1].gap;
+ if($('ease').value==='s')k=k*k*(3-2*k);pose(frames[i],frames[i+1],k)}
+let pt=0;
+function togglePlay(){
+ if(!frames.length)return;S.playing=!S.playing;
+ if(S.playing){if(pt>=total())pt=0;if(pt<=0){fxLo=-1;fxReset()}else fxLo=pt;setLook(true);tc.enabled=false;tcObj.visible=false}else{tc.enabled=true;tcObj.visible=true}
+ $('bPlay').textContent=S.playing?'⏸ Pause':'▶ Play';
+}
+$('bPlay').onclick=togglePlay;
+$('scrub').oninput=e=>{pt=+e.target.value/1000;sample(pt)};
+function syncScrub(){const s=$('scrub');s.max=Math.round(total()*1000);s.value=Math.round(pt*1000);$('tinfo').textContent=`${frames.length} frames · ${total().toFixed(2)} s`}
+function drawTL(){
+ const el=$('frames');el.textContent='';
+ frames.forEach((f,i)=>{
+  if(i){const g=document.createElement('label');g.className='gap';g.innerHTML='<span>Seconds</span>';const n=document.createElement('input');n.type='number';n.min=.05;n.step=.1;n.value=f.gap;
+   n.onchange=()=>{f.gap=Math.max(.05,+n.value||.05);n.value=f.gap;syncScrub();pushH()};g.append(n);el.append(g)}
+  const b=document.createElement('div');b.className='fb'+(i===cur?' on':'');b.innerHTML=`<b>${i+1}${f.fx&&Object.keys(f.fx).length?' 💥':''}</b>`;
+  const d=document.createElement('div'),u=document.createElement('button'),x=document.createElement('button');
+  u.textContent='Replace Frame';u.title='Overwrite this frame with the current viewport state (keeps its position and gap)';x.textContent='✕';x.title='Delete frame';
+  u.onclick=ev=>{ev.stopPropagation();const g=f.gap,fx=f.fx;frames[i]=snap();frames[i].gap=g;if(fx)frames[i].fx=fx;cur=i;drawTL();pushH(true)};
+  x.onclick=ev=>{ev.stopPropagation();frames.splice(i,1);if(frames[0])frames[0].gap=0;cur=Math.min(cur,frames.length-1);drawTL();pushH(true)};
+  d.append(u,x);b.append(d);b.onclick=()=>{cur=i;pt=starts()[i];pose(f,f,0);drawTL();showFx()};el.append(b)});fxBtn();
+ syncScrub();
+}
+$('bCap').onclick=()=>{frames.push(snap());cur=frames.length-1;pt=total();drawTL();$('frames').scrollLeft=1e6;pushH(true)};
+studio.captureFrame=()=>$('bCap').click();
+
+/* ================= UNDO / REDO (30 steps) ================= */
+const hist=[];let hi=-1,hasUnsavedChanges=false;
+function hsnap(){return{
+ cam:{p:movieCam.position.toArray(),q:movieCam.quaternion.toArray(),fov:movieCam.fov},L:{...L},
+ actors:actors.map(a=>({a,p:a.root.position.toArray(),q:a.root.quaternion.toArray(),s:a.root.scale.toArray(),b:a.bones.map(b=>b.quaternion.toArray()),l:a.lp?{...a.lp}:null,f:a.fp?{...a.fp}:null})),
+ frames:frames.map(f=>({...f,actors:{...f.actors}}))}}
+const hkey=s=>JSON.stringify([s.cam,s.L,s.actors.map(x=>[x.a.id,x.p,x.q,x.s,x.b,x.l,x.f]),s.frames.map(f=>f.gap)]);
+function updHB(){$('bUndo').disabled=hi<1;$('bRedo').disabled=hi>=hist.length-1}
+function pushH(force){
+ if(S.playing||S.exporting)return;
+ const s=hsnap();s.k=hkey(s);if(!force&&hi>=0&&hist[hi].k===s.k)return;
+ hist.length=hi+1;hist.push(s);hasUnsavedChanges=true;if(hist.length>31)hist.shift();hi=hist.length-1;updHB();
+}
+function restore(s){
+ const keep=new Set(s.actors.map(x=>x.a)),had=new Set(actors);
+ actors.forEach(a=>{if(!keep.has(a)){scene.remove(a.root);if(a.helper){scene.remove(a.helper);const i=editorOnly.indexOf(a.helper);if(i>=0)editorOnly.splice(i,1)}}});
+ actors.length=0;
+ s.actors.forEach(x=>{const a=x.a;actors.push(a);
+  if(!had.has(a)){scene.add(a.root);if(a.helper){scene.add(a.helper);a.helper.visible=S.bone;editorOnly.push(a.helper)}}
+  a.root.position.fromArray(x.p);a.root.quaternion.fromArray(x.q);a.root.scale.fromArray(x.s);a.bones.forEach((b,i)=>b.quaternion.fromArray(x.b[i]));if(x.l){a.lp={...x.l};applyLight(a)}if(x.f){a.fp={...x.f};fxApply(a)}});
+ movieCam.position.fromArray(s.cam.p);movieCam.quaternion.fromArray(s.cam.q);movieCam.fov=s.cam.fov;movieCam.updateProjectionMatrix();camHelper.update();
+ Object.assign(L,s.L);SL.forEach(([k])=>ui[k].value=L[k]);ui.color.value=L.color;updateLights();
+ frames=s.frames.map(f=>({...f,actors:{...f.actors}}));cur=Math.min(cur,frames.length-1);
+ if(S.a&&!keep.has(S.a)){tc.detach();S.a=S.b=null;S.t=null}
+ drawActors();fillBones();drawTL();updHB();
+}
+function undo(){if(S.playing||hi<1)return;restore(hist[--hi]);hasUnsavedChanges=true}
+function redo(){if(S.playing||hi>=hist.length-1)return;restore(hist[++hi]);hasUnsavedChanges=true}
+$('bUndo').onclick=undo;$('bRedo').onclick=redo;
+
+/* ================= SAVE / LOAD ================= */
+const ta=$('ta'),io=$('io');
+$('bSave').onclick=()=>{ta.value=JSON.stringify({v:1,light:L,fps:+$('fps').value,ease:$('ease').value,actors:actors.map(a=>a.id),frames},null,1);io.showModal();ta.select()};
+$('bLoad').onclick=()=>{ta.value='';io.showModal()};
+$('ioClose').onclick=()=>io.close();
+$('ioCp').onclick=()=>{hasUnsavedChanges=false;ta.select();try{navigator.clipboard.writeText(ta.value)}catch(e){}document.execCommand&&document.execCommand('copy')};
+$('ioDl').onclick=async()=>{const dl=window.claude?await claude.use('downloads').catch(()=>null):null;saveOut(new Blob([ta.value],{type:'application/json'}),'animation-project.json',dl)};
+$('ioFile').onchange=async e=>{const f=e.target.files[0];if(f){ta.value=await f.text();applyJSON()}};
+$('ioApply').onclick=applyJSON;
+function applyJSON(){
+ try{const j=JSON.parse(ta.value);Object.assign(L,j.light||{});
+  SL.forEach(([k])=>ui[k].value=L[k]);ui.color.value=L.color;updateLights();
+  if(j.fps)$('fps').value=j.fps;if(j.ease)$('ease').value=j.ease;
+  frames=j.frames||[];cur=frames.length?0:-1;pt=0;drawTL();frames.length&&pose(frames[0],frames[0],0);pushH(true);hasUnsavedChanges=false;io.close();
+  const miss=(j.actors||[]).filter(id=>!actors.some(a=>a.id===id));
+  if(miss.length)alert('Frames loaded. Re-drop these objects (in the original order) to restore their poses: '+miss.join(', '))}
+ catch(e){alert('Invalid project JSON: '+e.message)}
+}
+
+/* ================= RENDER LOOP ================= */
+const pip=$('pip');
+function size(){if(S.exporting)return;renderer.setSize(vp.clientWidth,vp.clientHeight,false);edCam.aspect=vp.clientWidth/vp.clientHeight;edCam.updateProjectionMatrix()}
+new ResizeObserver(size).observe(vp);size();
+const hide=()=>editorOnly.forEach(o=>{o._v=o.visible;o.visible=false}),show=()=>editorOnly.forEach(o=>o.visible=o._v);
+function render(){
+ const W=vp.clientWidth,H=vp.clientHeight;renderer.setScissorTest(false);renderer.setViewport(0,0,W,H);
+ if(S.look){hide();movieCam.aspect=W/H;movieCam.updateProjectionMatrix();renderer.render(scene,movieCam);heatPass(movieCam,0,0,W,H);movieCam.aspect=16/9;movieCam.updateProjectionMatrix();show();pip.style.display='none'}
+ else{camHelper.update();renderer.render(scene,edCam);heatPass(edCam,0,0,W,H);
+  const pw=Math.min(320,W*.32),ph=pw*9/16;pip.style.display='';Object.assign(pip.style,{width:pw+'px',height:ph+'px',right:'12px',bottom:'12px'});
+  renderer.setScissorTest(true);renderer.setViewport(W-pw-12,12,pw,ph);renderer.setScissor(W-pw-12,12,pw,ph);
+  hide();renderer.render(scene,movieCam);heatPass(movieCam,W-pw-12,12,pw,ph);show();renderer.setScissorTest(false)}
+}
+let last=performance.now();
+renderer.setAnimationLoop(now=>{
+ const dt=Math.min((now-last)/1000,.1);last=now;studio.hooks.pre.forEach(f=>f(dt));
+ if(S.playing){const lo=fxLo;pt+=dt;fxLo=pt;fxKeys(lo,pt);const T=total(),fps=+$('fps').value;
+  if(pt>=T){pt=T;sample(T);togglePlay()}else sample(Math.floor(pt*fps+1e-6)/fps); // quantised to chosen FPS
+  $('scrub').value=Math.round(pt*1000);studio.hooks.play.forEach(f=>f(pt,dt))}
+ syncScale();flyStep(dt);if(!S.exporting)fxUpdate(dt);orbit.update();if(envDirty)rebuildEnv();if(!S.exporting)render();studio.hooks.post.forEach(f=>f(dt));
+});
+/* ================= EXPORT (video + PNG sequence) ================= */
+let exCancel=false;
+const exMsg=m=>$('exMsg').textContent=m,setProg=(v,m)=>{$('exP').value=Math.min(1,v);if(m)exMsg(m)};
+async function saveOut(data,name,dl){
+ if(dl){try{await dl.save({filename:name,data});hasUnsavedChanges=false;exMsg('Saved '+name)}catch(e){exMsg(e.code==='declined'?'Download declined.':'Save failed: '+(e.message||e.code))}}
+ else{const a=document.createElement('a');a.href=URL.createObjectURL(data);a.download=name;a.click();hasUnsavedChanges=false;exMsg('Download started: '+name)}
+}
+const loadJSZip=()=>window.JSZip?Promise.resolve(window.JSZip):new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';s.onload=()=>ok(window.JSZip);s.onerror=()=>no(new Error('JSZip failed to load'));document.head.append(s)});
+function renderMovie(w,h){renderer.setScissorTest(false);renderer.setViewport(0,0,w,h);hide();renderer.render(scene,movieCam);heatPass(movieCam,0,0,w,h);show()}
+async function exVideo(w,h,fps,dl){
+ const mime=['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(m=>window.MediaRecorder&&MediaRecorder.isTypeSupported(m));
+ if(!mime)throw new Error('MediaRecorder is not supported in this browser');
+ const stream=renderer.domElement.captureStream(fps),chunks=[],T=total();
+ const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:Math.round(Math.min(80e6,Math.max(8e6,w*h*fps*.15)))});
+ rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);
+ const done=new Promise(r=>rec.onstop=r);
+ sample(0);renderMovie(w,h);rec.start(250);const t0=performance.now();
+ await new Promise(res=>{const step=()=>{if(exCancel)return res();const t=(performance.now()-t0)/1000;
+  sample(Math.min(Math.floor(t*fps+1e-6)/fps,T));fxTick(t);renderMovie(w,h);setProg(t/(T+.2),`Recording ${Math.min(t,T).toFixed(1)} / ${T.toFixed(1)} s`);
+  t>=T+.2?res():requestAnimationFrame(step)};step()});
+ rec.stop();await done;stream.getTracks().forEach(t=>t.stop());
+ if(exCancel)return exMsg('Cancelled.');
+ setProg(1);await saveOut(new Blob(chunks,{type:mime.split(';')[0]}),'animation.'+(mime.includes('mp4')?'mp4':'webm'),dl);
+}
+async function exPng(w,h,fps,dl){
+ const JSZip=await loadJSZip(),zip=new JSZip(),T=total(),N=Math.ceil(T*fps-1e-6)+1,dt=1/fps;
+ for(let i=0;i<N;i++){if(exCancel)return exMsg('Cancelled.');
+  sample(Math.min(i*dt,T));fxTick(i*dt);renderMovie(w,h);
+  const blob=await new Promise(r=>renderer.domElement.toBlob(r,'image/png'));
+  zip.file(`frame_${String(i+1).padStart(4,'0')}.png`,blob);
+  setProg((i+1)/N*.9,`Rendering frame ${i+1} / ${N}`);await new Promise(r=>setTimeout(r));}
+ const out=await zip.generateAsync({type:'blob',compression:'STORE'},m=>setProg(.9+m.percent/1000,'Zipping '+Math.round(m.percent)+'%'));
+ if(exCancel)return exMsg('Cancelled.');
+ setProg(1);await saveOut(out,'frames.zip',dl);
+}
+async function runExport(){
+ if(frames.length<2)return exMsg('Capture at least 2 frames first.');
+ const [w,h]=$('exRes').value.split('x').map(Number),fps=+$('exFps').value,fmt=document.querySelector('input[name=exFmt]:checked').value;
+ const dl=window.claude?await claude.use('downloads').catch(()=>null):null;
+ exCancel=false;if(S.playing)togglePlay();fxReset();fxPrevT=-1;
+ const bk=hsnap(),pr=renderer.getPixelRatio();
+ S.exporting=true;$('exGo').disabled=true;setProg(0,'Starting…');
+ renderer.setPixelRatio(1);renderer.setSize(w,h,false);movieCam.aspect=w/h;movieCam.updateProjectionMatrix();
+ try{fmt==='video'?await exVideo(w,h,fps,dl):await exPng(w,h,fps,dl)}catch(e){exMsg('Export failed: '+e.message)}
+ finally{S.exporting=false;renderer.setPixelRatio(pr);size();movieCam.aspect=16/9;movieCam.updateProjectionMatrix();restore(bk);$('exGo').disabled=false}
+}
+$('bExp').onclick=()=>{setProg(0,'');$('ex').showModal()};
+$('exGo').onclick=runExport;
+$('exClose').onclick=()=>{exCancel=true;$('ex').close()};
+$('ex').addEventListener('close',()=>{exCancel=true});
+
+/* ================= EDITOR CAMERA FLY (WASD + Q/E + Shift) ================= */
+const FLY=new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','PageUp','PageDown','KeyR','KeyF']),fk={};
+const flyOn=()=>!/^(INPUT|SELECT|TEXTAREA)$/.test((document.activeElement||{}).tagName||'')&&!S.look&&!S.playing&&!S.exporting&&!$('io').open&&!$('ex').open;
+addEventListener('keydown',e=>{if(!/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))fk[e.code]=true});
+addEventListener('keyup',e=>{fk[e.code]=false});
+addEventListener('blur',()=>{for(const k in fk)fk[k]=false});
+renderer.domElement.addEventListener('pointerdown',()=>{const a=document.activeElement;if(a&&a!==document.body&&a.blur)a.blur()}); // clicking the viewport releases focus from any input
+
+
+const _fw=new THREE.Vector3(),_fr=new THREE.Vector3(),_fd=new THREE.Vector3(),_fUp=new THREE.Vector3(0,1,0),fv=new THREE.Vector3();
+function flyStep(dt){
+ _fd.set(0,0,0);
+ if(flyOn()){
+  const f=(fk.ArrowUp?1:0)-(fk.ArrowDown?1:0),r=(fk.ArrowRight?1:0)-(fk.ArrowLeft?1:0),u=(fk.PageUp||fk.KeyR?1:0)-(fk.PageDown||fk.KeyF?1:0);
+  edCam.getWorldDirection(_fw);_fr.crossVectors(_fw,_fUp).normalize();
+  _fd.addScaledVector(_fw,f).addScaledVector(_fr,r).addScaledVector(_fUp,u);
+  if(_fd.lengthSq())_fd.normalize().multiplyScalar(6*((fk.ShiftLeft||fk.ShiftRight)?4:1));
+ }
+ fv.lerp(_fd,1-Math.exp(-14*dt)); // smooth accel / decel
+ if(fv.lengthSq()<1e-6){fv.set(0,0,0);return}
+ const m=_fw.copy(fv).multiplyScalar(dt);
+ edCam.position.add(m);orbit.target.add(m); // pivot travels with the camera: never stuck
+}
+
+/* ================= PLACEABLE LIGHTS ================= */
+edCam.layers.enable(1); // layer 1 = editor-only bulb visuals (never in the movie camera)
+function applyLight(a){const p=a.lp,l=a.light;
+ l.color.set(p.c);l.intensity=p.b*30;l.distance=p.d;           // brightness 1.0 = 30 cd
+ l.shadow.camera.far=p.d>0?p.d:100;l.shadow.camera.updateProjectionMatrix();
+ a.bulb.forEach(m=>m.material.color.set(p.c))}
+function makeLight(){
+ const root=new THREE.Group(),l=new THREE.PointLight(0xffd36b,30,25,2);
+ l.castShadow=true;l.shadow.mapSize.set(1024,1024);l.shadow.bias=-.0005;l.shadow.normalBias=.02;l.shadow.radius=4;l.shadow.camera.near=.1;
+ const bulb=new THREE.Mesh(new THREE.SphereGeometry(.12,24,16),new THREE.MeshBasicMaterial({color:0xffd36b,toneMapped:false}));
+ const halo=new THREE.Mesh(new THREE.SphereGeometry(.3,24,16),new THREE.MeshBasicMaterial({color:0xffd36b,transparent:true,opacity:.18,depthWrite:false,toneMapped:false}));
+ bulb.layers.set(1);halo.layers.set(1);root.add(l,bulb,halo);
+ root.position.copy(edCam.position);scene.add(root);
+ const a={id:`Light#${++uid}`,name:'Light',root,bones:[],helper:null,light:l,bulb:[bulb,halo],lp:{c:'#ffd36b',b:1,d:25}};
+ applyLight(a);actors.push(a);drawActors();selectActor(a);pushH();return a;
+}
+$('bLight').onclick=makeLight;
+const li={c:$('lC'),b:$('lB'),bn:$('lBn'),d:$('lD'),dv:$('lDv')};
+function showInsp(){const a=S.a&&S.a.light?S.a:null;$('lightInsp').style.display=a?'':'none';if(!a)return;
+ li.c.value=a.lp.c;li.b.value=li.bn.value=a.lp.b;li.d.value=a.lp.d;li.dv.textContent=a.lp.d?'('+a.lp.d+' m)':'(unlimited)'}
+const ledit=fn=>{const a=S.a;if(a&&a.light){fn(a.lp);applyLight(a)}};
+li.c.oninput=()=>ledit(p=>p.c=li.c.value);
+li.b.oninput=()=>{li.bn.value=li.b.value;ledit(p=>p.b=+li.b.value)};
+li.bn.oninput=()=>{li.b.value=li.bn.value;ledit(p=>p.b=Math.max(0,+li.bn.value||0))};
+li.d.oninput=()=>{li.dv.textContent=+li.d.value?'('+li.d.value+' m)':'(unlimited)';ledit(p=>p.d=+li.d.value)};
+[li.c,li.b,li.bn,li.d].forEach(e=>e.onchange=()=>pushH());
+
+/* ================= VOLUMETRIC FX: fog volumes, indoor-aware smoke, explosions ================= */
+const FXV='attribute vec3 off,sa,col;varying vec2 vUv;varying float vA;varying vec3 vC;void main(){vUv=uv;vA=sa.y;vC=col;vec4 mv=viewMatrix*vec4(off,1.);float c=cos(sa.z),s=sin(sa.z);mv.xy+=mat2(c,-s,s,c)*position.xy*sa.x;gl_Position=projectionMatrix*mv;}';
+const FXF='varying vec2 vUv;varying float vA;varying vec3 vC;void main(){float d=length(vUv-.5)*2.;float a=1.-smoothstep(0.,1.,d);a*=a;gl_FragColor=vec4(vC,a*vA);}';
+const hex3=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255);
+class Pool{ // one instanced draw call of soft procedural radial-gradient billboards
+ constructor(max,additive){this.max=max;this.P=[];
+  const pl=new THREE.PlaneGeometry(1,1),g=new THREE.InstancedBufferGeometry();g.index=pl.index;g.setAttribute('position',pl.attributes.position);g.setAttribute('uv',pl.attributes.uv);
+  const A=()=>new THREE.InstancedBufferAttribute(new Float32Array(max*3),3).setUsage(THREE.DynamicDrawUsage);
+  this.off=A();this.sa=A();this.col=A();g.setAttribute('off',this.off);g.setAttribute('sa',this.sa);g.setAttribute('col',this.col);g.instanceCount=0;
+  this.mesh=new THREE.Mesh(g,new THREE.ShaderMaterial({vertexShader:FXV,fragmentShader:FXF,transparent:true,depthWrite:false,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending}));
+  this.mesh.frustumCulled=false;this.mesh.renderOrder=additive?11:10;this.mesh.raycast=()=>{}}
+ add(p){if(this.P.length<this.max)this.P.push(p)}
+ flush(){const P=this.P,o=this.off.array,s=this.sa.array,c=this.col.array;
+  for(let i=0;i<P.length;i++){const p=P[i],j=i*3;o[j]=p.x;o[j+1]=p.y;o[j+2]=p.z;s[j]=p.size;s[j+1]=p.a;s[j+2]=p.rot;c[j]=p.r;c[j+1]=p.g;c[j+2]=p.b}
+  this.mesh.geometry.instanceCount=P.length;this.off.needsUpdate=this.sa.needsUpdate=this.col.needsUpdate=true}}
+let cols=[],colDirty=true,fxEnd=0,fxFrame=0,fxLo=-1,fxPrevT=-1;
+const fxRay=new THREE.Raycaster(),_fo=new THREE.Vector3(),_fnn=new THREE.Vector3(),_fdv=new THREE.Vector3(),_wp=new THREE.Vector3();
+function getCols(){if(colDirty){cols=[];actors.forEach(a=>{if(a.fp||a.light)return;a.root.traverse(o=>{if(o.isMesh&&!o.isSkinnedMesh)cols.push(o)})});colDirty=false}return cols}
+function collide(p){ // time-sliced raycast: walls/ceilings deflect smoke instead of letting it pass through
+ if(performance.now()>fxEnd)return;const C=getCols();if(!C.length)return;
+ const sp=Math.hypot(p.vx,p.vy,p.vz);if(sp<1e-3){p.acc=0;return}
+ _fdv.set(p.vx/sp,p.vy/sp,p.vz/sp);_fo.set(p.x,p.y,p.z);fxRay.set(_fo,_fdv);fxRay.far=Math.min(1.5,sp*p.acc*1.2+p.size*.25+.05);p.acc=0;
+ const h=fxRay.intersectObjects(C,false)[0];if(!h||!h.face)return;
+ _fnn.copy(h.face.normal).transformDirection(h.object.matrixWorld);if(_fnn.dot(_fdv)>0)_fnn.negate();
+ const vn=p.vx*_fnn.x+p.vy*_fnn.y+p.vz*_fnn.z;p.vx-=vn*_fnn.x;p.vy-=vn*_fnn.y;p.vz-=vn*_fnn.z; // slide along the surface
+ p.x=h.point.x+_fnn.x*.06;p.y=h.point.y+_fnn.y*.06;p.z=h.point.z+_fnn.z*.06;
+ if(_fnn.y<-.5){const t=Math.random()*6.283;p.vx+=Math.cos(t)*p.spread;p.vz+=Math.sin(t)*p.spread;p.ceil=1.2} // ceiling: spread out sideways
+}
+function puff(pool,x,y,z,vx,vy,vz,o){const c=hex3(o.c),sh=.85+Math.random()*.3;
+ pool.add({x,y,z,vx,vy,vz,age:0,life:o.life,s0:o.s0,s1:o.s1,size:o.s0,a0:o.a,a:0,rot:Math.random()*6.28,r:c[0]*sh,g:c[1]*sh,b:c[2]*sh,rise:o.rise,spread:o.rise*.9+.3,ceil:0,ph:Math.random()*6.28,acc:0})}
+function smokeStep(P,dt,col){const stride=Math.max(1,Math.ceil(P.length/24));
+ for(let i=P.length-1;i>=0;i--){const p=P[i];p.age+=dt;p.acc+=dt;
+  if(p.age>=p.life){P[i]=P[P.length-1];P.pop();continue}
+  const k=p.age/p.life;
+  if(p.ceil>0)p.ceil-=dt;else p.vy+=(p.rise-p.vy)*Math.min(1,dt*1.5);
+  const tt=p.age*1.3+p.ph;p.vx+=Math.sin(tt)*dt*.4;p.vz+=Math.cos(tt*1.17)*dt*.4;
+  const dr=Math.max(0,1-dt*.7);p.vx*=dr;p.vz*=dr;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;
+  if(col&&(i+fxFrame)%stride===0)collide(p);
+  p.size=p.s0+(p.s1-p.s0)*Math.sqrt(k);p.a=p.a0*Math.min(k/.12,1)*(1-k)}}
+function fireStep(P,dt){for(let i=P.length-1;i>=0;i--){const p=P[i];p.age+=dt;
+  if(p.age>=p.life){P[i]=P[P.length-1];P.pop();continue}
+  const k=p.age/p.life,d=Math.exp(-2.6*dt);p.vx*=d;p.vy=p.vy*d+dt*1.2;p.vz*=d;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;
+  p.size=p.s0+(p.s1-p.s0)*k;p.a=p.a0*(1-k)*(1-k*.3)}}
+const CORE_V='varying vec3 vP,vN,vV;void main(){vP=position;vN=normalize(normalMatrix*normal);vec4 mv=modelViewMatrix*vec4(position,1.);vV=-mv.xyz;gl_Position=projectionMatrix*mv;}';
+const CORE_F=`uniform float uK,uT;varying vec3 vP,vN,vV;
+float h3(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
+float n3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(h3(i),h3(i+vec3(1,0,0)),f.x),mix(h3(i+vec3(0,1,0)),h3(i+vec3(1,1,0)),f.x),f.y),mix(mix(h3(i+vec3(0,0,1)),h3(i+vec3(1,0,1)),f.x),mix(h3(i+vec3(0,1,1)),h3(i+vec3(1,1,1)),f.x),f.y),f.z);}
+float fbm(vec3 p){float a=.5,s=0.;for(int i=0;i<4;i++){s+=a*n3(p);p*=2.03;a*=.5;}return s;}
+void main(){float fr=pow(1.-abs(dot(normalize(vN),normalize(vV))),1.4);
+ float n=fbm(vP*2.6+vec3(0.,-uT*1.8,0.));float heat=clamp(n*1.25+(1.-uK)*.9-.35,0.,1.);
+ vec3 c=mix(vec3(.35,.04,0.),vec3(1.,.35,.05),smoothstep(0.,.5,heat));c=mix(c,vec3(1.,.85,.35),smoothstep(.45,.85,heat));c=mix(c,vec3(1.),smoothstep(.85,1.,heat)*(1.-uK));
+ float a=(1.-uK)*(.55+.45*n)*(.4+.6*(1.-fr*.5));gl_FragColor=vec4(c*1.6,a);}`;
+const makeCore=()=>{const m=new THREE.Mesh(new THREE.IcosahedronGeometry(1,4),new THREE.ShaderMaterial({uniforms:{uK:{value:0},uT:{value:0}},vertexShader:CORE_V,fragmentShader:CORE_F,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide}));m.visible=false;m.raycast=()=>{};m.renderOrder=12;return m};
+function fxApply(a){const p=a.fp,f=a.fr;
+ if(p.type==='fog'){f.hv.scale.set(p.radius,p.height,p.radius);f.hv.position.y=p.height/2;f.hv.material.color.set(p.color);
+  const key=[p.density,p.radius,p.height].join();
+  if(f.key!==key){f.key=key;const P=f.pool.P;P.length=0;const n=Math.round(40+p.density*240),base=Math.max(1.2,Math.min(p.radius*.5,p.height*1.3));
+   for(let i=0;i<n;i++){const r=p.radius*Math.sqrt(Math.random()),t=Math.random()*6.283;
+    P.push({ox:Math.cos(t)*r,oy:Math.pow(Math.random(),1.2)*p.height,oz:Math.sin(t)*r,ph:Math.random()*6.28,x:0,y:0,z:0,size:base*(1.2+Math.random()*.8),a:(.03+.09*p.density)*(1-.5*r/p.radius),rot:Math.random()*6.28,r:1,g:1,b:1})}}
+ }else if(p.type==='boom')f.hv.scale.setScalar(p.R);else if(p.type==='heat')heatApply(a);
+}
+function fxBoom(a){const p=a.fp,f=a.fr;f.age=0;f.total=f.left=Math.round(70*p.smoke);f.eacc=0;a.root.getWorldPosition(_wp);
+ for(let i=0;i<70;i++){const d=new THREE.Vector3(Math.random()-.5,Math.random()-.3,Math.random()-.5).normalize(),s=p.R*(1.2+Math.random()*2.2);
+  puff(f.fire,_wp.x+d.x*.1,_wp.y+d.y*.1,_wp.z+d.z*.1,d.x*s,d.y*s,d.z*s,{c:['#ff7a18','#ffb02e','#ffd36b'][i%3],life:(.5+Math.random()*.6)*(p.dur||1.4)/1.4,s0:p.R*.45,s1:p.R*1.1,a:.85,rise:0})}
+ f.light.color.set('#ffb464');f.core.visible=true}
+function fxUpdate(dt){dt=Math.min(dt,.05);fxEnd=performance.now()+2.5;fxFrame++;const t=performance.now()/1000;
+ for(const a of actors){const p=a.fp;if(!p)continue;const f=a.fr;a.root.getWorldPosition(_wp);
+  if(p.type==='fog'){const c=hex3(p.color);
+   for(const q of f.pool.P){q.x=_wp.x+q.ox+Math.sin(t*.15+q.ph)*.5;q.y=_wp.y+q.oy+Math.sin(t*.1+q.ph*1.7)*.15;q.z=_wp.z+q.oz+Math.cos(t*.13+q.ph)*.5;q.r=c[0];q.g=c[1];q.b=c[2]}
+   f.pool.flush();
+  }else if(p.type==='smoke'){
+   f.acc+=p.rate*dt;
+   while(f.acc>=1){f.acc--;puff(f.pool,_wp.x+(Math.random()-.5)*.2,_wp.y,_wp.z+(Math.random()-.5)*.2,(Math.random()-.5)*.3,p.rise*(.5+Math.random()*.5),(Math.random()-.5)*.3,{c:p.color,life:3+Math.random()*3,s0:.35*p.amount,s1:(1.4+Math.random())*p.amount*1.3,a:.4,rise:p.rise})}
+   smokeStep(f.pool.P,dt,true);f.pool.flush();
+  }else if(p.type==='boom'){ // explosion: fireball core + light flash + dark smoke plume
+   if(f.age>=0){f.age+=dt;const age=f.age,k=age/(p.dur||1.4);
+    f.core.visible=k<1;if(k<1){const e=1-Math.pow(1-k,3);f.core.scale.setScalar(p.R*(.15+.85*e));f.core.material.uniforms.uK.value=k;f.core.material.uniforms.uT.value=age}
+    const fl=age<.05?age/.05:Math.exp(-(age-.05)*3.2);f.light.intensity=fl<.002?0:p.li*100*fl;f.light.distance=p.R*10;
+    f.eacc+=f.total/Math.max(.8,p.dur||1.4)*dt;
+    while(f.eacc>=1&&f.left>0){f.eacc--;f.left--;const d=new THREE.Vector3(Math.random()-.5,Math.random()*.4,Math.random()-.5).normalize().multiplyScalar(p.R*.5*Math.random());
+     puff(f.pool,_wp.x+d.x,_wp.y+.3+d.y,_wp.z+d.z,d.x*1.2,d.y+p.R*.3,d.z*1.2,{c:p.scol||'#303034',life:(4+Math.random()*2.5)*(p.linger||1),s0:p.R*.6,s1:p.R*(1.8+Math.random()),a:.55,rise:p.R*.35+.4})}
+    if(age>9){f.age=-1;f.light.intensity=0;f.core.visible=false}
+   }
+   smokeStep(f.pool.P,dt,true);f.pool.flush();fireStep(f.fire.P,dt);f.fire.flush();
+  }}}
+function fxReset(){for(const a of actors){const f=a.fr;if(!f||a.fp.type==='fog'||a.fp.type==='heat')continue;f.pool.P.length=0;f.pool.flush();if(f.fire){f.fire.P.length=0;f.fire.flush();f.age=-1;f.light.intensity=0;f.core.visible=false}}}
+function fxKeys(lo,hi){const T=starts();frames.forEach((f,i)=>{if(f.fx&&T[i]>lo&&T[i]<=hi)for(const id in f.fx){const a=actors.find(x=>x.id===id);if(a&&a.fp&&a.fp.type==='boom'){const x=f.actors[id]&&f.actors[id].x;if(x){Object.assign(a.fp,x);fxApply(a)}fxBoom(a)}}})}
+function fxTick(t){const lo=fxPrevT;fxKeys(lo,t);fxUpdate(lo<0?0:t-lo);fxPrevT=t}
+function spawnFx(type){
+ const root=new THREE.Group(),d=new THREE.Vector3();edCam.getWorldDirection(d);
+ root.position.copy(edCam.position).addScaledVector(d,5);root.position.y=Math.max(0,root.position.y);
+ const nm={fog:'Fog',smoke:'Smoke',boom:'Explosion'}[type];
+ const fp={fog:{type,density:.4,color:'#cfe3f5',radius:6,height:3},smoke:{type,rate:25,amount:1,rise:1.2,color:'#8f949a'},boom:{type,R:3,li:20,smoke:1,scol:'#303034',dur:1.4,linger:1}}[type];
+ const fr={},hv=(g,c,o)=>{const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:c,wireframe:true,transparent:true,opacity:o,depthWrite:false}));m.layers.set(1);root.add(m);return m};
+ if(type==='fog'){fr.pool=new Pool(320);fr.hv=hv(new THREE.CylinderGeometry(1,1,1,24,1,true),0x66ccff,.5)}
+ if(type==='smoke'){fr.pool=new Pool(700);fr.acc=0;hv(new THREE.ConeGeometry(.18,.5,12),0xaaaaaa,.9).position.y=.25}
+ if(type==='boom'){fr.pool=new Pool(1500);fr.fire=new Pool(200,true);fr.core=makeCore();fr.light=new THREE.PointLight(0xffb464,0,30,2);fr.age=-1;fr.left=0;fr.eacc=0;fr.total=0;
+  hv(new THREE.IcosahedronGeometry(.3,1),0xff8a1f,.9);fr.hv=hv(new THREE.IcosahedronGeometry(1,2),0xff8a1f,.2);fr.hv.raycast=()=>{};root.add(fr.core,fr.light,fr.fire.mesh)}
+ root.add(fr.pool.mesh);
+ const a={id:`${nm}#${++uid}`,name:nm,root,bones:[],helper:null,fp,fr};
+ scene.add(root);actors.push(a);fxApply(a);drawActors();selectActor(a);pushH();return a}
+/* ---- Heat bar: screen-space refraction shimmer (copies the framebuffer, re-draws a distorted plane) ---- */
+const HEAT_F=`uniform sampler2D tBack;uniform vec2 uOrigin,uRes;uniform float uT,uI,uSp;varying vec2 vUv;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+void main(){vec2 suv=(gl_FragCoord.xy-uOrigin)/uRes;
+ vec2 q=vec2(vUv.x*9.,vUv.y*3.5-uT*uSp);float a=n(q)+.5*n(q*2.3+7.),b=n(q+vec2(31.,5.))+.5*n(q*2.1+13.);
+ float edge=smoothstep(0.,.12,vUv.x)*smoothstep(1.,.88,vUv.x)*smoothstep(0.,.1,vUv.y)*smoothstep(1.,.45,vUv.y);
+ vec2 off=vec2(a-.75,b-.75)*.018*uI*edge;
+ vec3 c=texture2D(tBack,suv+off).rgb;c+=vec3(.05,.035,.02)*uI*edge*(.5+a);gl_FragColor=vec4(c,1.);}`;
+const _hv=new THREE.Vector2(),HT={};
+function heatApply(a){const p=a.fp,f=a.fr,h=Math.max(1.5,p.length*.5);f.hp.scale.set(p.length,h,1);f.hp.position.y=h/2;f.mat.uniforms.uI.value=p.intensity;f.mat.uniforms.uSp.value=p.speed}
+function heatPass(cam,vx,vy,vw,vh){
+ const hs=actors.filter(a=>a.fp&&a.fp.type==='heat');if(!hs.length)return;
+ const pr=renderer.getPixelRatio(),X=Math.round(vx*pr),Y=Math.round(vy*pr),Wd=Math.max(1,Math.round(vw*pr)),Ht=Math.max(1,Math.round(vh*pr)),key=Wd+'x'+Ht;
+ if(!HT[key]){if(Object.keys(HT).length>5)for(const k in HT){HT[k].dispose();delete HT[k]}const t=new THREE.FramebufferTexture(Wd,Ht);t.minFilter=t.magFilter=THREE.LinearFilter;HT[key]=t}
+ const tex=HT[key];renderer.copyFramebufferToTexture(_hv.set(X,Y),tex);
+ const now=performance.now()/1000;hs.forEach(a=>{const u=a.fr.mat.uniforms;u.tBack.value=tex;u.uOrigin.value.set(X,Y);u.uRes.value.set(Wd,Ht);u.uT.value=now});
+ const mask=cam.layers.mask,ac=renderer.autoClear,bg=scene.background,sa=renderer.shadowMap.autoUpdate;
+ cam.layers.set(2);renderer.autoClear=false;scene.background=null;renderer.shadowMap.autoUpdate=false; // layer 2 = heat planes only, drawn over the copied frame
+ renderer.render(scene,cam);
+ cam.layers.mask=mask;renderer.autoClear=ac;scene.background=bg;renderer.shadowMap.autoUpdate=sa;
+}
+function spawnHeat(){
+ const root=new THREE.Group(),d=new THREE.Vector3();edCam.getWorldDirection(d);
+ root.position.copy(edCam.position).addScaledVector(d,5);root.position.y=Math.max(0,root.position.y);
+ const mat=new THREE.ShaderMaterial({uniforms:{tBack:{value:null},uOrigin:{value:new THREE.Vector2()},uRes:{value:new THREE.Vector2(1,1)},uT:{value:0},uI:{value:1},uSp:{value:1.2}},
+  vertexShader:'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:HEAT_F,depthWrite:false,side:THREE.DoubleSide});
+ const hp=new THREE.Group(),m=new THREE.Mesh(new THREE.PlaneGeometry(1,1),mat);m.layers.set(2);m.raycast=()=>{};
+ const w=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({color:0xff6a3a,wireframe:true,transparent:true,opacity:.7,depthWrite:false}));w.layers.set(1);
+ hp.add(m,w);root.add(hp);
+ const a={id:`HeatBar#${++uid}`,name:'HeatBar',root,bones:[],helper:null,fp:{type:'heat',length:4,intensity:1,speed:1.2},fr:{mat,hp}};
+ scene.add(root);actors.push(a);fxApply(a);drawActors();selectActor(a);pushH();return a}
+$('bHeat').onclick=spawnHeat;
+$('bFog').onclick=()=>spawnFx('fog');$('bSmoke').onclick=()=>spawnFx('smoke');$('bBoom').onclick=()=>spawnFx('boom');
+const FXUI={fog:[['density','Density',0,1,.01],['color','Color','color'],['radius','Radius (m)',1,30,.5],['height','Height (m)',.5,15,.5]],
+ smoke:[['rate','Emission rate /s',0,80,1],['amount','Smoke size',.2,4,.05],['rise','Rise speed',.1,4,.05],['color','Color','color']],
+ boom:[['R','Blast radius (m)',.5,15,.1],['li','Light intensity',0,100,1],['smoke','Smoke output',0,8,.05],['scol','Smoke color','color'],['dur','Fireball duration (s)',.4,4,.05],['linger','Smoke linger ×',.3,4,.05]],
+ heat:[['length','Length / scale (m)',.5,30,.1],['intensity','Intensity',0,3,.05],['speed','Distortion speed',0,5,.05]]};
+function showFx(){const a=S.a&&S.a.fp?S.a:null;$('fxInsp').style.display=a?'':'none';if(!a)return;
+ $('fxTitle').textContent={fog:'Volumetric Fog',smoke:'Smoke Emitter',boom:'Explosion',heat:'Heat Bar'}[a.fp.type];
+ const rows=$('fxRows');rows.textContent='';
+ FXUI[a.fp.type].forEach(([k,n,mn,mx,st])=>{const r=document.createElement('div');r.className='row';r.innerHTML=`<span>${n}</span>`;const i=document.createElement('input');
+  if(mn==='color'){i.type='color'}else{i.type='range';i.min=mn;i.max=mx;i.step=st}
+  i.value=a.fp[k];i.oninput=()=>{a.fp[k]=mn==='color'?i.value:+i.value;fxApply(a)};i.onchange=()=>pushH();r.append(i);rows.append(r)});
+ if(a.fp.type==='boom'){const r=document.createElement('div');r.style.cssText='display:flex;gap:4px;margin-top:6px;flex-wrap:wrap';
+  [['Black','#1a1a1c'],['Gray','#6f7378'],['White','#e8e8e8'],['Toxic green','#7cff3a'],['Orange','#ff7a1a']].forEach(([n,c])=>{const b=document.createElement('button');b.textContent=n;b.style.cssText='padding:2px 6px;font-size:11px;border-left:10px solid '+c;b.onclick=()=>{a.fp.scol=c;showFx();pushH()};r.append(b)});rows.append(r)}
+ $('fxBtns').style.display=a.fp.type==='boom'?'flex':'none';fxBtn()}
+function fxBtn(){const a=S.a,b=$('fxKey');if(!a||!a.fp||a.fp.type!=='boom')return;
+ const ok=cur>=0&&frames[cur],on=ok&&frames[cur].fx&&frames[cur].fx[a.id];b.disabled=!ok;
+ b.textContent=ok?(on?`✓ Fires at frame ${cur+1} (click to remove)`:`Fire at selected frame (${cur+1})`):'Capture / select a frame first';b.classList.toggle('on',!!on)}
+$('fxTrig').onclick=()=>{const a=S.a;if(a&&a.fp&&a.fp.type==='boom')fxBoom(a)};
+$('fxKey').onclick=()=>{const a=S.a;if(!a||!a.fp||a.fp.type!=='boom'||cur<0||!frames[cur])return;
+ const m={...(frames[cur].fx||{})};if(m[a.id])delete m[a.id];else m[a.id]=1;frames[cur].fx=m;drawTL();pushH(true)};
+
+addEventListener('beforeunload',e=>{if(!hasUnsavedChanges)return;e.preventDefault();e.returnValue='';return ''}); // native "Are you sure you want to leave?"
+selectCam();setBoneMode(false);drawTL();pushH(true);hasUnsavedChanges=false;
+</script></body></html>
